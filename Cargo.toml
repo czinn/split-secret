@@ -1,0 +1,12 @@
+[package]
+name = "sss"
+version = "0.1.0"
+authors = ["Charles Zinn <charles.zinn@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+galois_2p8 = "0.1.1"    # Basic Arithmetic over all GF(2^8) fields
+clap = "3.0.0-beta.2"   # A simple to use, efficient, and full-featured Command Line Argument Parser
+rand = "0.8.3"          # Random number generators and other randomness functionality.
