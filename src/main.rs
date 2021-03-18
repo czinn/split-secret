@@ -4,7 +4,7 @@ mod shamir;
 use std::io::{Read, Write};
 use std::fs::File;
 
-use crate::partitioner::{Splitter, Joiner, InputPartition, OutputPartition};
+use crate::partitioner::{Partitioner, InputPartition, OutputPartition};
 
 use clap::Clap;
 
@@ -71,17 +71,18 @@ fn main() {
             let shamir = shamir::Shamir::new(k);
 
             let mut input_file = File::open(opts.input).unwrap();
-            let mut output_partitions = Vec::new();
+            let mut output_files = Vec::new();
             for x in 1u8..=n {
                 let mut output_file = File::create(format!("{}.{}", opts.output, x)).expect("Error creating output file");
                 write_share_header(&mut output_file, &ShareHeader { k: k, x: x });
-                output_partitions.push(OutputPartition { x: x, writer: output_file });
+                output_files.push(output_file);
             }
+            let mut output_partitions = output_files.iter_mut().enumerate().map(|(i, output_file)| OutputPartition { x: (i + 1) as u8, writer: output_file }).collect();
 
             shamir.split(&mut input_file, &mut output_partitions);
         },
         Subcommand::Join(opts) => {
-            let mut input_partitions = Vec::new();
+            let mut input_files = Vec::new();
             let mut k = None;
             for input in opts.inputs {
                 let mut input_file = File::open(input).unwrap();
@@ -89,14 +90,15 @@ fn main() {
                 assert!(share_header.k == k.unwrap_or(share_header.k));
                 k = Some(share_header.k);
 
-                input_partitions.push(InputPartition { x: share_header.x, reader: input_file });
-                if input_partitions.len() == k.unwrap().into() {
+                input_files.push((share_header.x, input_file));
+                if input_files.len() == k.unwrap().into() {
                     break;
                 }
             }
             let k = k.unwrap_or(0);
-            assert!(input_partitions.len() == k.into());
+            assert!(input_files.len() == k.into());
             assert!(k > 0);
+            let mut input_partitions = input_files.iter_mut().map(|(x, input_file)| InputPartition { x: *x, reader: input_file }).collect();
             let mut output_file = File::create(opts.output).unwrap();
 
             let shamir = shamir::Shamir::new(k);

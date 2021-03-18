@@ -1,7 +1,7 @@
 use std::io::{Read, Write};
 use std::cmp;
 
-use crate::partitioner::{Splitter, Joiner, InputPartition, OutputPartition};
+use crate::partitioner::{Partitioner, InputPartition, OutputPartition};
 
 use galois_2p8::{PrimitivePolynomialField, IrreducablePolynomial, Field};
 use rand::rngs::OsRng;
@@ -21,8 +21,8 @@ impl Shamir {
 
 const BUF_SIZE: usize = 512;
 
-impl<W: Write> Splitter<W> for Shamir {
-    fn split(&self, input: &mut impl Read, outputs: &mut Vec<OutputPartition<W>>) {
+impl Partitioner for Shamir {
+    fn split(&self, input: &mut impl Read, outputs: &mut Vec<OutputPartition>) {
         let n = outputs.len() as u8;
         assert!(n >= self.k);
         // TODO: check that all the indicies in the outputs are unique
@@ -59,10 +59,8 @@ impl<W: Write> Splitter<W> for Shamir {
             }
         }
     }
-}
 
-impl<R: Read> Joiner<R> for Shamir {
-    fn join(&self, inputs: &mut Vec<InputPartition<R>>, output: &mut impl Write) {
+    fn join(&self, inputs: &mut Vec<InputPartition>, output: &mut impl Write) {
         assert!(inputs.len() == self.k.into());
 
         let field = PrimitivePolynomialField::new_might_panic(self.base);
@@ -102,6 +100,30 @@ impl<R: Read> Joiner<R> for Shamir {
                 field.add_scaled_multiword(&mut write_buf[0..read_size], &read_buf[0..read_size], *scale);
             }
             output.write(&write_buf[0..read_size]).unwrap();
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn two_of_three() {
+        let plaintext: Vec<u8> = "hello world".as_bytes().into();
+        let s = Shamir::new(2);
+        let partitions = s.split_in_memory(&plaintext, 3);
+        for partition in partitions.iter() {
+            assert_ne!(plaintext, partition.value);
+            assert_eq!(plaintext.len(), partition.value.len());
+        }
+        {
+            let result = s.join_in_memory(&partitions[0..2]);
+            assert_eq!(plaintext, result);
+        }
+        {
+            let result = s.join_in_memory(&partitions[1..3]);
+            assert_eq!(plaintext, result);
         }
     }
 }
