@@ -1,5 +1,7 @@
+mod poly;
 mod partitioner;
 mod shamir;
+mod ida;
 
 use std::io::{Read, Write};
 use std::fs::File;
