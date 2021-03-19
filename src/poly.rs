@@ -1,4 +1,4 @@
-use galois_2p8::{PrimitivePolynomialField, IrreducablePolynomial, Field};
+use galois_2p8::Field;
 
 /* Computes the Lagrange basis polynomials for xs[0..k] and evaluates them at each eval_xs.
  * For each x in eval_xs, this function returns the value of the k+1 Lagrange polynomials evaluated
@@ -34,6 +34,7 @@ pub fn lagrange_eval(field: &dyn Field, xs: &[u8], eval_xs: &[u8]) -> Vec<Vec<u8
 #[cfg(test)]
 mod tests {
     use super::*;
+    use galois_2p8::{PrimitivePolynomialField, IrreducablePolynomial};
 
     #[test]
     fn test_lagrange() {

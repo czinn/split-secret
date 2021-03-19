@@ -159,7 +159,6 @@ mod tests {
         let i = Ida::new(2);
         let partitions = i.split_in_memory(&plaintext, 3);
         for partition in partitions.iter() {
-            println!("{:?}", partition.value);
             assert_ne!(plaintext, partition.value);
             assert!(plaintext.len() > partition.value.len());
         }
@@ -179,7 +178,6 @@ mod tests {
         let i = Ida::new(5);
         let partitions = i.split_in_memory(&plaintext, 10);
         for partition in partitions.iter() {
-            println!("{:?}", partition.value);
             assert_ne!(plaintext, partition.value);
             assert!(plaintext.len() > partition.value.len());
         }

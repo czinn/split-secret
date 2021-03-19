@@ -126,4 +126,27 @@ mod tests {
             assert_eq!(plaintext, result);
         }
     }
+
+    #[test]
+    fn five_of_ten() {
+        let plaintext: Vec<u8> = "this is a much longer text".as_bytes().into();
+        let s = Shamir::new(5);
+        let partitions = s.split_in_memory(&plaintext, 10);
+        for partition in partitions.iter() {
+            assert_ne!(plaintext, partition.value);
+            assert!(plaintext.len() == partition.value.len());
+        }
+        {
+            let result = s.join_in_memory(&partitions[0..5]);
+            assert_eq!(plaintext, result);
+        }
+        {
+            let result = s.join_in_memory(&partitions[1..6]);
+            assert_eq!(plaintext, result);
+        }
+        {
+            let result = s.join_in_memory(&partitions[5..10]);
+            assert_eq!(plaintext, result);
+        }
+    }
 }
