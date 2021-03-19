@@ -66,7 +66,7 @@ impl Partitioner for Shamir {
         let field = PrimitivePolynomialField::new_might_panic(self.base);
 
         let mut read_bufs: Vec<[u8; BUF_SIZE]> = vec![[0u8; BUF_SIZE]; self.k.into()];
-        let mut write_buf: [u8; BUF_SIZE];
+        let mut write_buf: [u8; BUF_SIZE] = [0u8; BUF_SIZE];
 
         let mut combine_coefficients: Vec<u8> = Vec::new();
         for input in inputs.iter() {
@@ -95,8 +95,8 @@ impl Partitioner for Shamir {
                 break;
             }
 
-            write_buf = [0u8; BUF_SIZE];
-            for (read_buf, scale) in read_bufs.iter_mut().zip(combine_coefficients.iter()) {
+            write_buf.fill(0u8);
+            for (read_buf, scale) in read_bufs.iter().zip(combine_coefficients.iter()) {
                 field.add_scaled_multiword(&mut write_buf[0..read_size], &read_buf[0..read_size], *scale);
             }
             output.write(&write_buf[0..read_size]).unwrap();
