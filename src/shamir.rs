@@ -40,7 +40,7 @@ impl Partitioner for Shamir {
                 {
                     let slice = &read_buf[0..read_size];
                     for write_buf in write_bufs.iter_mut() {
-                        write_buf[0..read_size].clone_from_slice(slice);
+                        write_buf[0..read_size].copy_from_slice(slice);
                     }
                     let mut xs = vec![1u8; n.into()];
                     for _i in 1u8..=self.k - 1 {
