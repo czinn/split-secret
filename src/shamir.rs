@@ -1,7 +1,7 @@
 use std::io::{Read, Write};
 use std::cmp;
 
-use crate::partitioner::{Partitioner, InputPartition, OutputPartition};
+use crate::partitioner::{Partitioner, InputPartition, OutputPartition, test_join};
 
 use galois_2p8::{PrimitivePolynomialField, IrreducablePolynomial, Field};
 use rand::rngs::OsRng;
@@ -111,42 +111,24 @@ mod tests {
     #[test]
     fn two_of_three() {
         let plaintext: Vec<u8> = "hello world".as_bytes().into();
-        let s = Shamir::new(2);
-        let partitions = s.split_in_memory(&plaintext, 3);
+        let shamir = Shamir::new(2);
+        let partitions = shamir.split_in_memory(&plaintext, 3);
         for partition in partitions.iter() {
             assert_ne!(plaintext, partition.value);
             assert_eq!(plaintext.len(), partition.value.len());
         }
-        {
-            let result = s.join_in_memory(&partitions[0..2]);
-            assert_eq!(plaintext, result);
-        }
-        {
-            let result = s.join_in_memory(&partitions[1..3]);
-            assert_eq!(plaintext, result);
-        }
+        test_join(&shamir, &partitions[..], 2, &plaintext);
     }
 
     #[test]
     fn five_of_ten() {
         let plaintext: Vec<u8> = "this is a much longer text".as_bytes().into();
-        let s = Shamir::new(5);
-        let partitions = s.split_in_memory(&plaintext, 10);
+        let shamir = Shamir::new(5);
+        let partitions = shamir.split_in_memory(&plaintext, 10);
         for partition in partitions.iter() {
             assert_ne!(plaintext, partition.value);
             assert!(plaintext.len() == partition.value.len());
         }
-        {
-            let result = s.join_in_memory(&partitions[0..5]);
-            assert_eq!(plaintext, result);
-        }
-        {
-            let result = s.join_in_memory(&partitions[1..6]);
-            assert_eq!(plaintext, result);
-        }
-        {
-            let result = s.join_in_memory(&partitions[5..10]);
-            assert_eq!(plaintext, result);
-        }
+        test_join(&shamir, &partitions[..], 5, &plaintext);
     }
 }

@@ -1,7 +1,7 @@
 use std::io::{Read, Write};
 use std::cmp;
 
-use crate::partitioner::{Partitioner, InputPartition, OutputPartition};
+use crate::partitioner::{Partitioner, InputPartition, OutputPartition, test_join};
 use crate::poly::lagrange_eval;
 use crate::bit_pad::{PaddedReader, PaddedWriter};
 
@@ -122,42 +122,24 @@ mod tests {
     #[test]
     fn two_of_three() {
         let plaintext: Vec<u8> = "hello worlds".as_bytes().into();
-        let i = Ida::new(2);
-        let partitions = i.split_in_memory(&plaintext, 3);
+        let ida = Ida::new(2);
+        let partitions = ida.split_in_memory(&plaintext, 3);
         for partition in partitions.iter() {
             assert_ne!(plaintext, partition.value);
             assert!(plaintext.len() > partition.value.len());
         }
-        {
-            let result = i.join_in_memory(&partitions[0..2]);
-            assert_eq!(plaintext, result);
-        }
-        {
-            let result = i.join_in_memory(&partitions[1..3]);
-            assert_eq!(plaintext, result);
-        }
+        test_join(&ida, &partitions[..], 2, &plaintext);
     }
 
     #[test]
     fn five_of_ten() {
         let plaintext: Vec<u8> = "this is a much longer text".as_bytes().into();
-        let i = Ida::new(5);
-        let partitions = i.split_in_memory(&plaintext, 10);
+        let ida = Ida::new(5);
+        let partitions = ida.split_in_memory(&plaintext, 10);
         for partition in partitions.iter() {
             assert_ne!(plaintext, partition.value);
             assert!(plaintext.len() > partition.value.len());
         }
-        {
-            let result = i.join_in_memory(&partitions[0..5]);
-            assert_eq!(plaintext, result);
-        }
-        {
-            let result = i.join_in_memory(&partitions[1..6]);
-            assert_eq!(plaintext, result);
-        }
-        {
-            let result = i.join_in_memory(&partitions[5..10]);
-            assert_eq!(plaintext, result);
-        }
+        test_join(&ida, &partitions[..], 5, &plaintext);
     }
 }
