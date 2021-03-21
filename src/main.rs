@@ -1,5 +1,5 @@
 mod poly;
-mod iso_pad;
+mod bit_pad;
 mod partitioner;
 mod shamir;
 mod ida;

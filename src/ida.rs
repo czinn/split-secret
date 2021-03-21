@@ -3,7 +3,7 @@ use std::cmp;
 
 use crate::partitioner::{Partitioner, InputPartition, OutputPartition};
 use crate::poly::lagrange_eval;
-use crate::iso_pad::{PaddedReader, PaddedWriter};
+use crate::bit_pad::{PaddedReader, PaddedWriter};
 
 use galois_2p8::{PrimitivePolynomialField, IrreducablePolynomial, Field};
 
