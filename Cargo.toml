@@ -1,5 +1,5 @@
 [package]
-name = "sss"
+name = "split-secret"
 version = "0.1.0"
 authors = ["Charles Zinn <charles.zinn@gmail.com>"]
 edition = "2018"

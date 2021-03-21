@@ -219,7 +219,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "sss"
+name = "split-secret"
 version = "0.1.0"
 dependencies = [
  "clap",
