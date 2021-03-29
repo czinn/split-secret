@@ -1,7 +1,7 @@
 use std::io::{Read, Write};
 use std::cmp;
 
-use crate::partitioner::{Partitioner, InputPartition, OutputPartition, test_join};
+use crate::partitioner::{Partitioner, InputPartition, OutputPartition};
 use crate::poly::lagrange_eval;
 use crate::bit_pad::{PaddedReader, PaddedWriter};
 
@@ -19,7 +19,7 @@ impl Ida {
     }
 }
 
-const BUF_SIZE: usize = 512;
+const BUF_SIZE: usize = 1024;
 
 impl Partitioner for Ida {
     fn split(&self, input: &mut impl Read, outputs: &mut Vec<OutputPartition>) {
@@ -118,6 +118,7 @@ impl Partitioner for Ida {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::partitioner::test_join;
 
     #[test]
     fn two_of_three() {

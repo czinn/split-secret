@@ -1,8 +1,10 @@
 mod poly;
 mod bit_pad;
 mod partitioner;
+mod block_mode_streaming;
 mod shamir;
 mod ida;
+mod shamir_ida;
 
 use std::io::{Read, Write};
 use std::fs::File;
