@@ -1,16 +1,17 @@
-use std::io::{Read, Write};
 use std::cmp;
+use std::io::{Read, Write};
 use std::marker::PhantomData;
 
-use crate::partitioner::{Partitioner, InputPartition, OutputPartition};
+use crate::padding_streaming::{Op, PaddedReader, PaddedWriter};
+use crate::partitioner::{InputPartition, OutputPartition, Partitioner};
 use crate::poly::lagrange_eval;
-use crate::padding_streaming::{PaddedReader, PaddedWriter, Op};
 
-use galois_2p8::{PrimitivePolynomialField, IrreducablePolynomial, Field};
 use block_padding::Padding;
+use galois_2p8::{Field, IrreducablePolynomial, PrimitivePolynomialField};
 
 pub struct Ida<P>
-where P: Padding,
+where
+    P: Padding,
 {
     k: u8,
     base: IrreducablePolynomial,
@@ -18,18 +19,24 @@ where P: Padding,
 }
 
 impl<P> Ida<P>
-where P: Padding,
+where
+    P: Padding,
 {
     pub fn new(k: u8) -> Self {
         assert!(k > 1);
-        return Ida { k: k, base: IrreducablePolynomial::Poly84320, _p: PhantomData };
+        return Ida {
+            k: k,
+            base: IrreducablePolynomial::Poly84320,
+            _p: PhantomData,
+        };
     }
 }
 
 const BUF_SIZE: usize = 1024;
 
 impl<P> Partitioner for Ida<P>
-where P: Padding,
+where
+    P: Padding,
 {
     fn split<R: Read, W: Write>(&self, input: R, outputs: &mut [OutputPartition<W>]) {
         let n = outputs.len() as u8;
@@ -54,8 +61,7 @@ where P: Padding,
             loop {
                 match input.read(&mut read_buf[read_size..target_read_size]) {
                     Err(_) | Ok(0) => break,
-                    Ok(block_read_size) =>
-                    {
+                    Ok(block_read_size) => {
                         read_size += block_read_size;
                     }
                 }
@@ -70,13 +76,17 @@ where P: Padding,
                 for (write_buf, output_lagrange) in write_bufs.iter_mut().zip(lagrange.iter()) {
                     write_buf[i] = 0u8;
                     for (y, lagrange_coefficient) in slice.iter().zip(output_lagrange.iter()) {
-                        write_buf[i] = field.add(write_buf[i], field.mult(*y, *lagrange_coefficient));
+                        write_buf[i] =
+                            field.add(write_buf[i], field.mult(*y, *lagrange_coefficient));
                     }
                 }
             }
             let write_size = read_size / k_usize;
             for (write_buf, output) in write_bufs.iter().zip(outputs.iter_mut()) {
-                output.writer.write_all(&write_buf[0..write_size]).expect("write failed");
+                output
+                    .writer
+                    .write_all(&write_buf[0..write_size])
+                    .expect("write failed");
             }
         }
     }
@@ -94,7 +104,9 @@ where P: Padding,
         let input_xs: Vec<u8> = inputs.iter().map(|input| input.x).collect();
         let data_xs: Vec<u8> = (0u8..self.k).collect();
         let lagrange_t = lagrange_eval(&field, &input_xs[..], &data_xs[..]);
-        let lagrange: Vec<Vec<u8>> = (0..k_usize).map(|i| lagrange_t.iter().map(|l| l[i]).collect()).collect();
+        let lagrange: Vec<Vec<u8>> = (0..k_usize)
+            .map(|i| lagrange_t.iter().map(|l| l[i]).collect())
+            .collect();
 
         loop {
             let mut read_size = BUF_SIZE;
@@ -103,7 +115,7 @@ where P: Padding,
                     Err(_) => {
                         read_size = 0;
                         break;
-                    },
+                    }
                     Ok(n) => read_size = cmp::min(read_size, n),
                 }
             }
@@ -118,7 +130,9 @@ where P: Padding,
                 }
             }
 
-            output.write_all(&write_buf[0..read_size * k_usize]).unwrap();
+            output
+                .write_all(&write_buf[0..read_size * k_usize])
+                .unwrap();
         }
         output.flush().unwrap();
     }

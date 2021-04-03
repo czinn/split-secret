@@ -1,25 +1,29 @@
-mod poly;
-mod utils;
-mod partitioner;
-mod padding_streaming;
 mod block_mode_streaming;
-mod shamir;
 mod ida;
+mod padding_streaming;
+mod partitioner;
+mod poly;
+mod shamir;
 mod shamir_ida;
+mod utils;
 
-use std::io::{Read, Write};
 use std::fs::File;
+use std::io::{Read, Write};
 
-use crate::partitioner::{Partitioner, InputPartition, OutputPartition};
+use crate::partitioner::{InputPartition, OutputPartition, Partitioner};
 
 use aes::Aes256;
-use block_padding::Iso7816;
 use block_modes::Cbc;
+use block_padding::Iso7816;
 
 use clap::Clap;
 
 #[derive(Clap)]
-#[clap(version = "0.1.0", author = "Charles Zinn", about = "An implementation of Shamir's Secret Sharing")]
+#[clap(
+    version = "0.1.0",
+    author = "Charles Zinn",
+    about = "An implementation of Shamir's Secret Sharing"
+)]
 struct Opts {
     #[clap(subcommand)]
     subcommand: Subcommand,
@@ -37,11 +41,18 @@ enum Subcommand {
 struct SplitOpts {
     #[clap(short, about = "number of shares to generate")]
     n: u8,
-    #[clap(short, about = "number of shares required to reconstruct original (default: n)")]
+    #[clap(
+        short,
+        about = "number of shares required to reconstruct original (default: n)"
+    )]
     k: Option<u8>,
     #[clap(about = "input file")]
     input: String,
-    #[clap(short, long, about = "prefix for output files; output will be in [output].1, [output].2, etc.")]
+    #[clap(
+        short,
+        long,
+        about = "prefix for output files; output will be in [output].1, [output].2, etc."
+    )]
     output: String,
 }
 
@@ -83,14 +94,22 @@ fn main() {
             let mut input_file = File::open(opts.input).unwrap();
             let mut output_files = Vec::new();
             for x in 1u8..=n {
-                let mut output_file = File::create(format!("{}.{}", opts.output, x)).expect("Error creating output file");
+                let mut output_file = File::create(format!("{}.{}", opts.output, x))
+                    .expect("Error creating output file");
                 write_share_header(&mut output_file, &ShareHeader { k: k, x: x });
                 output_files.push(output_file);
             }
-            let mut output_partitions: Vec<_> = output_files.iter_mut().enumerate().map(|(i, output_file)| OutputPartition { x: (i + 1) as u8, writer: output_file }).collect();
+            let mut output_partitions: Vec<_> = output_files
+                .iter_mut()
+                .enumerate()
+                .map(|(i, output_file)| OutputPartition {
+                    x: (i + 1) as u8,
+                    writer: output_file,
+                })
+                .collect();
 
             shamir_ida.split(&mut input_file, &mut output_partitions);
-        },
+        }
         Subcommand::Join(opts) => {
             let mut input_files = Vec::new();
             let mut k = None;
@@ -108,7 +127,13 @@ fn main() {
             let k = k.unwrap_or(0);
             assert!(input_files.len() == k.into());
             assert!(k > 0);
-            let mut input_partitions: Vec<_> = input_files.iter_mut().map(|(x, input_file)| InputPartition { x: *x, reader: input_file }).collect();
+            let mut input_partitions: Vec<_> = input_files
+                .iter_mut()
+                .map(|(x, input_file)| InputPartition {
+                    x: *x,
+                    reader: input_file,
+                })
+                .collect();
             let mut output_file = File::create(opts.output).unwrap();
 
             let shamir_ida = shamir_ida::ShamirIda::<Cbc<_, _>, Aes256, Iso7816>::new(k);
