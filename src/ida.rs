@@ -1,11 +1,12 @@
 use std::io::{Read, Write};
 use std::cmp;
 
-use crate::partitioner::{Partitioner, InputPartition, OutputPartition, test_join};
+use crate::partitioner::{Partitioner, InputPartition, OutputPartition};
 use crate::poly::lagrange_eval;
-use crate::bit_pad::{PaddedReader, PaddedWriter};
+use crate::padding_streaming::{PaddedReader, PaddedWriter, Op};
 
 use galois_2p8::{PrimitivePolynomialField, IrreducablePolynomial, Field};
+use block_padding::Iso7816;
 
 pub struct Ida {
     k: u8,
@@ -19,7 +20,7 @@ impl Ida {
     }
 }
 
-const BUF_SIZE: usize = 512;
+const BUF_SIZE: usize = 1024;
 
 impl Partitioner for Ida {
     fn split(&self, input: &mut impl Read, outputs: &mut Vec<OutputPartition>) {
@@ -28,7 +29,7 @@ impl Partitioner for Ida {
         // TODO: check that all the indicies in the outputs are unique
 
         let k_usize: usize = self.k.into();
-        let mut input = PaddedReader::new(k_usize, input);
+        let mut input = PaddedReader::<Iso7816, _>::new(k_usize, input, Op::Pad);
         let target_read_size = BUF_SIZE - BUF_SIZE % k_usize;
 
         let field = PrimitivePolynomialField::new_might_panic(self.base);
@@ -75,7 +76,7 @@ impl Partitioner for Ida {
     fn join(&self, inputs: &mut Vec<InputPartition>, output: &mut impl Write) {
         let k_usize: usize = self.k.into();
         assert!(inputs.len() == k_usize);
-        let mut output = PaddedWriter::new(k_usize, output);
+        let mut output = PaddedWriter::<Iso7816, _>::new(k_usize, output, Op::Unpad);
 
         let field = PrimitivePolynomialField::new_might_panic(self.base);
 
@@ -118,6 +119,7 @@ impl Partitioner for Ida {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::partitioner::test_join;
 
     #[test]
     fn two_of_three() {

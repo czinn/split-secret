@@ -41,6 +41,7 @@ pub trait Partitioner {
 }
 
 // Tests all subsets of k inputs and verifies that the output is correct.
+#[cfg(test)]
 pub fn test_join(partitioner: &impl Partitioner, inputs: &[InMemoryPartition], k: u8, expected_output: &Vec<u8>) {
     for i in 0..2u32.pow(k.into()) {
         if i.count_ones() != k.into() {
