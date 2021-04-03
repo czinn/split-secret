@@ -23,7 +23,6 @@ where T: BlockMode<C, P>,
       C: BlockCipher + NewBlockCipher,
       P: Padding,
       R: Read,
-      R: Read,
 {
     block_mode: T,
     reader: R,

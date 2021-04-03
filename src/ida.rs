@@ -1,35 +1,43 @@
 use std::io::{Read, Write};
 use std::cmp;
+use std::marker::PhantomData;
 
 use crate::partitioner::{Partitioner, InputPartition, OutputPartition};
 use crate::poly::lagrange_eval;
 use crate::padding_streaming::{PaddedReader, PaddedWriter, Op};
 
 use galois_2p8::{PrimitivePolynomialField, IrreducablePolynomial, Field};
-use block_padding::Iso7816;
+use block_padding::Padding;
 
-pub struct Ida {
+pub struct Ida<P>
+where P: Padding,
+{
     k: u8,
     base: IrreducablePolynomial,
+    _p: PhantomData<P>,
 }
 
-impl Ida {
+impl<P> Ida<P>
+where P: Padding,
+{
     pub fn new(k: u8) -> Self {
         assert!(k > 1);
-        return Ida { k: k, base: IrreducablePolynomial::Poly84320 };
+        return Ida { k: k, base: IrreducablePolynomial::Poly84320, _p: PhantomData };
     }
 }
 
 const BUF_SIZE: usize = 1024;
 
-impl Partitioner for Ida {
+impl<P> Partitioner for Ida<P>
+where P: Padding,
+{
     fn split<R: Read, W: Write>(&self, input: R, outputs: &mut [OutputPartition<W>]) {
         let n = outputs.len() as u8;
         assert!(n >= self.k);
         // TODO: check that all the indicies in the outputs are unique
 
         let k_usize: usize = self.k.into();
-        let mut input = PaddedReader::<Iso7816, _>::new(k_usize, input, Op::Pad);
+        let mut input = PaddedReader::<P, _>::new(k_usize, input, Op::Pad);
         let target_read_size = BUF_SIZE - BUF_SIZE % k_usize;
 
         let field = PrimitivePolynomialField::new_might_panic(self.base);
@@ -76,7 +84,7 @@ impl Partitioner for Ida {
     fn join<R: Read, W: Write>(&self, inputs: &mut [InputPartition<R>], output: W) {
         let k_usize: usize = self.k.into();
         assert!(inputs.len() == k_usize);
-        let mut output = PaddedWriter::<Iso7816, _>::new(k_usize, output, Op::Unpad);
+        let mut output = PaddedWriter::<P, _>::new(k_usize, output, Op::Unpad);
 
         let field = PrimitivePolynomialField::new_might_panic(self.base);
 
@@ -121,10 +129,11 @@ mod tests {
     use super::*;
     use crate::partitioner::test_join;
 
-    #[test]
-    fn two_of_three() {
+    use block_padding::{Iso7816, Pkcs7};
+
+    fn base_two_of_three<P: Padding>() {
         let plaintext: Vec<u8> = "hello worlds".as_bytes().into();
-        let ida = Ida::new(2);
+        let ida = Ida::<P>::new(2);
         let mut partitions = ida.split_in_memory(&plaintext, 3);
         for partition in partitions.iter() {
             assert_ne!(plaintext, partition.value);
@@ -134,9 +143,19 @@ mod tests {
     }
 
     #[test]
+    fn two_of_three_iso() {
+        base_two_of_three::<Iso7816>();
+    }
+
+    #[test]
+    fn two_of_three_pkcs() {
+        base_two_of_three::<Pkcs7>();
+    }
+
+    #[test]
     fn five_of_ten() {
         let plaintext: Vec<u8> = "this is a much longer text".as_bytes().into();
-        let ida = Ida::new(5);
+        let ida = Ida::<Iso7816>::new(5);
         let mut partitions = ida.split_in_memory(&plaintext, 10);
         for partition in partitions.iter() {
             assert_ne!(plaintext, partition.value);

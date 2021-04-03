@@ -12,6 +12,10 @@ use std::fs::File;
 
 use crate::partitioner::{Partitioner, InputPartition, OutputPartition};
 
+use aes::Aes256;
+use block_padding::Iso7816;
+use block_modes::Cbc;
+
 use clap::Clap;
 
 #[derive(Clap)]
@@ -74,7 +78,7 @@ fn main() {
         Subcommand::Split(opts) => {
             let n = opts.n;
             let k = opts.k.unwrap_or(opts.n);
-            let shamir_ida = shamir_ida::ShamirIda::new(k);
+            let shamir_ida = shamir_ida::ShamirIda::<Cbc<_, _>, Aes256, Iso7816>::new(k);
 
             let mut input_file = File::open(opts.input).unwrap();
             let mut output_files = Vec::new();
@@ -107,7 +111,7 @@ fn main() {
             let mut input_partitions: Vec<_> = input_files.iter_mut().map(|(x, input_file)| InputPartition { x: *x, reader: input_file }).collect();
             let mut output_file = File::create(opts.output).unwrap();
 
-            let shamir_ida = shamir_ida::ShamirIda::new(k);
+            let shamir_ida = shamir_ida::ShamirIda::<Cbc<_, _>, Aes256, Iso7816>::new(k);
 
             shamir_ida.join(&mut input_partitions, &mut output_file);
         }
