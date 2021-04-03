@@ -22,7 +22,7 @@ impl Shamir {
 const BUF_SIZE: usize = 1024;
 
 impl Partitioner for Shamir {
-    fn split(&self, input: &mut impl Read, outputs: &mut Vec<OutputPartition>) {
+    fn split<R: Read, W: Write>(&self, mut input: R, outputs: &mut Vec<OutputPartition<W>>) {
         let n = outputs.len() as u8;
         assert!(n >= self.k);
         // TODO: check that all the indicies in the outputs are unique
@@ -60,7 +60,7 @@ impl Partitioner for Shamir {
         }
     }
 
-    fn join(&self, inputs: &mut Vec<InputPartition>, output: &mut impl Write) {
+    fn join<R: Read, W: Write>(&self, inputs: &mut Vec<InputPartition<R>>, mut output: W) {
         assert!(inputs.len() == self.k.into());
 
         let field = PrimitivePolynomialField::new_might_panic(self.base);
@@ -113,23 +113,23 @@ mod tests {
     fn two_of_three() {
         let plaintext: Vec<u8> = "hello world".as_bytes().into();
         let shamir = Shamir::new(2);
-        let partitions = shamir.split_in_memory(&plaintext, 3);
+        let mut partitions = shamir.split_in_memory(&plaintext, 3);
         for partition in partitions.iter() {
             assert_ne!(plaintext, partition.value);
             assert_eq!(plaintext.len(), partition.value.len());
         }
-        test_join(&shamir, &partitions[..], 2, &plaintext);
+        test_join(&shamir, &mut partitions[..], 2, &plaintext);
     }
 
     #[test]
     fn five_of_ten() {
         let plaintext: Vec<u8> = "this is a much longer text".as_bytes().into();
         let shamir = Shamir::new(5);
-        let partitions = shamir.split_in_memory(&plaintext, 10);
+        let mut partitions = shamir.split_in_memory(&plaintext, 10);
         for partition in partitions.iter() {
             assert_ne!(plaintext, partition.value);
             assert!(plaintext.len() == partition.value.len());
         }
-        test_join(&shamir, &partitions[..], 5, &plaintext);
+        test_join(&shamir, &mut partitions[..], 5, &plaintext);
     }
 }

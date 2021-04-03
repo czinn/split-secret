@@ -23,7 +23,7 @@ impl Ida {
 const BUF_SIZE: usize = 1024;
 
 impl Partitioner for Ida {
-    fn split(&self, input: &mut impl Read, outputs: &mut Vec<OutputPartition>) {
+    fn split<R: Read, W: Write>(&self, input: R, outputs: &mut Vec<OutputPartition<W>>) {
         let n = outputs.len() as u8;
         assert!(n >= self.k);
         // TODO: check that all the indicies in the outputs are unique
@@ -73,7 +73,7 @@ impl Partitioner for Ida {
         }
     }
 
-    fn join(&self, inputs: &mut Vec<InputPartition>, output: &mut impl Write) {
+    fn join<R: Read, W: Write>(&self, inputs: &mut Vec<InputPartition<R>>, output: W) {
         let k_usize: usize = self.k.into();
         assert!(inputs.len() == k_usize);
         let mut output = PaddedWriter::<Iso7816, _>::new(k_usize, output, Op::Unpad);
@@ -125,23 +125,23 @@ mod tests {
     fn two_of_three() {
         let plaintext: Vec<u8> = "hello worlds".as_bytes().into();
         let ida = Ida::new(2);
-        let partitions = ida.split_in_memory(&plaintext, 3);
+        let mut partitions = ida.split_in_memory(&plaintext, 3);
         for partition in partitions.iter() {
             assert_ne!(plaintext, partition.value);
             assert!(plaintext.len() > partition.value.len());
         }
-        test_join(&ida, &partitions[..], 2, &plaintext);
+        test_join(&ida, &mut partitions[..], 2, &plaintext);
     }
 
     #[test]
     fn five_of_ten() {
         let plaintext: Vec<u8> = "this is a much longer text".as_bytes().into();
         let ida = Ida::new(5);
-        let partitions = ida.split_in_memory(&plaintext, 10);
+        let mut partitions = ida.split_in_memory(&plaintext, 10);
         for partition in partitions.iter() {
             assert_ne!(plaintext, partition.value);
             assert!(plaintext.len() > partition.value.len());
         }
-        test_join(&ida, &partitions[..], 5, &plaintext);
+        test_join(&ida, &mut partitions[..], 5, &plaintext);
     }
 }

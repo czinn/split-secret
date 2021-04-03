@@ -30,7 +30,7 @@ impl ShamirIda {
 }
 
 impl Partitioner for ShamirIda {
-    fn split(&self, input: &mut impl Read, outputs: &mut Vec<OutputPartition>) {
+    fn split<R: Read, W: Write>(&self, input: R, outputs: &mut Vec<OutputPartition<W>>) {
         let mut key = [0u8; 48];
         OsRng.fill_bytes(&mut key[..]);
         let cipher = Aes256::new(&GenericArray::from_slice(&key[..32]));
@@ -45,9 +45,9 @@ impl Partitioner for ShamirIda {
         self.ida.split(&mut input, outputs);
     }
 
-    fn join(&self, inputs: &mut Vec<InputPartition>, output: &mut impl Write) {
+    fn join<R: Read, W: Write>(&self, inputs: &mut Vec<InputPartition<R>>, output: W) {
         let mut key = Vec::new();
-        let mut limited_inputs: Vec<(u8, Take<&mut dyn Read>)> = inputs.iter_mut().map(|input| (input.x, input.reader.take(48))).collect();
+        let mut limited_inputs: Vec<(u8, Take<_>)> = inputs.iter_mut().map(|input| (input.x, (&mut input.reader).take(48))).collect();
         self.shamir.join(&mut limited_inputs.iter_mut().map(|(x, reader)| InputPartition { x: *x, reader }).collect(), &mut key);
         assert!(key.len() == 48);
 
@@ -69,21 +69,21 @@ mod tests {
     fn two_of_three() {
         let plaintext: Vec<u8> = "hello world".as_bytes().into();
         let shamir = ShamirIda::new(2);
-        let partitions = shamir.split_in_memory(&plaintext, 3);
+        let mut partitions = shamir.split_in_memory(&plaintext, 3);
         for partition in partitions.iter() {
             assert_ne!(plaintext, partition.value);
         }
-        test_join(&shamir, &partitions[..], 2, &plaintext);
+        test_join(&shamir, &mut partitions[..], 2, &plaintext);
     }
 
     #[test]
     fn five_of_ten() {
         let plaintext: Vec<u8> = "this is a much longer text".as_bytes().into();
         let shamir = ShamirIda::new(5);
-        let partitions = shamir.split_in_memory(&plaintext, 10);
+        let mut partitions = shamir.split_in_memory(&plaintext, 10);
         for partition in partitions.iter() {
             assert_ne!(plaintext, partition.value);
         }
-        test_join(&shamir, &partitions[..], 5, &plaintext);
+        test_join(&shamir, &mut partitions[..], 5, &plaintext);
     }
 }
