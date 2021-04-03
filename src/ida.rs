@@ -23,7 +23,7 @@ impl Ida {
 const BUF_SIZE: usize = 1024;
 
 impl Partitioner for Ida {
-    fn split<R: Read, W: Write>(&self, input: R, outputs: &mut Vec<OutputPartition<W>>) {
+    fn split<R: Read, W: Write>(&self, input: R, outputs: &mut [OutputPartition<W>]) {
         let n = outputs.len() as u8;
         assert!(n >= self.k);
         // TODO: check that all the indicies in the outputs are unique
@@ -73,7 +73,7 @@ impl Partitioner for Ida {
         }
     }
 
-    fn join<R: Read, W: Write>(&self, inputs: &mut Vec<InputPartition<R>>, output: W) {
+    fn join<R: Read, W: Write>(&self, inputs: &mut [InputPartition<R>], output: W) {
         let k_usize: usize = self.k.into();
         assert!(inputs.len() == k_usize);
         let mut output = PaddedWriter::<Iso7816, _>::new(k_usize, output, Op::Unpad);

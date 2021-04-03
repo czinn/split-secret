@@ -30,7 +30,7 @@ impl ShamirIda {
 }
 
 impl Partitioner for ShamirIda {
-    fn split<R: Read, W: Write>(&self, input: R, outputs: &mut Vec<OutputPartition<W>>) {
+    fn split<R: Read, W: Write>(&self, input: R, outputs: &mut [OutputPartition<W>]) {
         let mut key = [0u8; 48];
         OsRng.fill_bytes(&mut key[..]);
         let cipher = Aes256::new(&GenericArray::from_slice(&key[..32]));
@@ -45,10 +45,10 @@ impl Partitioner for ShamirIda {
         self.ida.split(&mut input, outputs);
     }
 
-    fn join<R: Read, W: Write>(&self, inputs: &mut Vec<InputPartition<R>>, output: W) {
+    fn join<R: Read, W: Write>(&self, inputs: &mut [InputPartition<R>], output: W) {
         let mut key = Vec::new();
         let mut limited_inputs: Vec<(u8, Take<_>)> = inputs.iter_mut().map(|input| (input.x, (&mut input.reader).take(48))).collect();
-        self.shamir.join(&mut limited_inputs.iter_mut().map(|(x, reader)| InputPartition { x: *x, reader }).collect(), &mut key);
+        self.shamir.join(&mut limited_inputs.iter_mut().map(|(x, reader)| InputPartition { x: *x, reader }).collect::<Vec<_>>(), &mut key);
         assert!(key.len() == 48);
 
         let cipher = Aes256::new(&GenericArray::from_slice(&key[..32]));

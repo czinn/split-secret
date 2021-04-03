@@ -17,23 +17,23 @@ pub struct OutputPartition<W: Write> {
 }
 
 pub trait Partitioner {
-    fn split<R: Read, W: Write>(&self, input: R, outputs: &mut Vec<OutputPartition<W>>);
+    fn split<R: Read, W: Write>(&self, input: R, outputs: &mut [OutputPartition<W>]);
 
-    fn split_in_memory(&self, input: &Vec<u8>, n: u8) -> Vec<InMemoryPartition> {
+    fn split_in_memory(&self, input: &[u8], n: u8) -> Vec<InMemoryPartition> {
         let mut outputs = Vec::new();
         for x in 1u8..=n {
             outputs.push(InMemoryPartition { x: x, value: Vec::new() });
         }
-        self.split(Cursor::new(input), &mut outputs.iter_mut().map(|p| OutputPartition { x: p.x, writer: &mut p.value }).collect());
+        self.split(Cursor::new(input), &mut outputs.iter_mut().map(|p| OutputPartition { x: p.x, writer: &mut p.value }).collect::<Vec<_>>());
 
         outputs
     }
 
-    fn join<R: Read, W: Write>(&self, inputs: &mut Vec<InputPartition<R>>, output: W);
+    fn join<R: Read, W: Write>(&self, inputs: &mut [InputPartition<R>], output: W);
 
-    fn join_in_memory(&self, inputs: &mut Vec<&mut InMemoryPartition>) -> Vec<u8> {
+    fn join_in_memory(&self, inputs: &mut [&mut InMemoryPartition]) -> Vec<u8> {
         let mut input_readers: Vec<(u8, Cursor<_>)> = inputs.iter_mut().map(|input| (input.x, Cursor::new(&mut input.value))).collect();
-        let mut inputs = input_readers.iter_mut().map(|(x, reader)| InputPartition { x: *x, reader: reader}).collect();
+        let mut inputs = input_readers.iter_mut().map(|(x, reader)| InputPartition { x: *x, reader: reader}).collect::<Vec<_>>();
         let mut output = Vec::new();
         self.join(&mut inputs, &mut output);
         output

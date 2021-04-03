@@ -22,7 +22,7 @@ impl Shamir {
 const BUF_SIZE: usize = 1024;
 
 impl Partitioner for Shamir {
-    fn split<R: Read, W: Write>(&self, mut input: R, outputs: &mut Vec<OutputPartition<W>>) {
+    fn split<R: Read, W: Write>(&self, mut input: R, outputs: &mut [OutputPartition<W>]) {
         let n = outputs.len() as u8;
         assert!(n >= self.k);
         // TODO: check that all the indicies in the outputs are unique
@@ -60,7 +60,7 @@ impl Partitioner for Shamir {
         }
     }
 
-    fn join<R: Read, W: Write>(&self, inputs: &mut Vec<InputPartition<R>>, mut output: W) {
+    fn join<R: Read, W: Write>(&self, inputs: &mut [InputPartition<R>], mut output: W) {
         assert!(inputs.len() == self.k.into());
 
         let field = PrimitivePolynomialField::new_might_panic(self.base);

@@ -83,7 +83,7 @@ fn main() {
                 write_share_header(&mut output_file, &ShareHeader { k: k, x: x });
                 output_files.push(output_file);
             }
-            let mut output_partitions = output_files.iter_mut().enumerate().map(|(i, output_file)| OutputPartition { x: (i + 1) as u8, writer: output_file }).collect();
+            let mut output_partitions: Vec<_> = output_files.iter_mut().enumerate().map(|(i, output_file)| OutputPartition { x: (i + 1) as u8, writer: output_file }).collect();
 
             shamir_ida.split(&mut input_file, &mut output_partitions);
         },
@@ -104,7 +104,7 @@ fn main() {
             let k = k.unwrap_or(0);
             assert!(input_files.len() == k.into());
             assert!(k > 0);
-            let mut input_partitions = input_files.iter_mut().map(|(x, input_file)| InputPartition { x: *x, reader: input_file }).collect();
+            let mut input_partitions: Vec<_> = input_files.iter_mut().map(|(x, input_file)| InputPartition { x: *x, reader: input_file }).collect();
             let mut output_file = File::create(opts.output).unwrap();
 
             let shamir_ida = shamir_ida::ShamirIda::new(k);
