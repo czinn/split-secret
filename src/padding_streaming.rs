@@ -2,6 +2,8 @@ use std::io::{Read, Write, Result, Error, ErrorKind};
 use std::marker::PhantomData;
 use std::cmp::min;
 
+use crate::utils::read_full;
+
 use block_padding::Padding;
 
 // mod_positive(n, k) == n (mod k); 1 <= mod_positive(n, k) <= k
@@ -40,17 +42,6 @@ where P: Padding,
     pub fn new(block_size: usize, reader: R, op: Op) -> Self {
         Self { _p: PhantomData, block_size, reader, op, buf: vec![0u8; block_size], bytes_read: 0, output_buf: None }
     }
-
-    fn read_full(reader: &mut R, buf: &mut [u8]) -> Result<usize> {
-        let mut read_size = 0;
-        loop {
-            match reader.read(&mut buf[read_size..])? {
-                0 => break,
-                n => read_size += n,
-            }
-        }
-        Ok(read_size)
-    }
 }
 
 impl<P, R> Read for PaddedReader<P, R>
@@ -82,13 +73,13 @@ where P: Padding,
             // Move remaining bytes in self.buf backwards
             self.buf.copy_within(buf_len..buf_bytes, 0);
             // Try to fill up the rest of self.buf
-            bytes_here += Self::read_full(&mut self.reader, &mut self.buf[buf_bytes - buf_len..])?;
+            bytes_here += read_full(&mut self.reader, &mut self.buf[buf_bytes - buf_len..])?;
         } else {
             // Copy over all the bytes from self.buf
             buf[..buf_bytes].copy_from_slice(&self.buf[..buf_bytes]);
             // Try to fill up the rest of buf and self.buf
-            bytes_here += Self::read_full(&mut self.reader, &mut buf[buf_bytes..])?;
-            bytes_here += Self::read_full(&mut self.reader, &mut self.buf[..])?;
+            bytes_here += read_full(&mut self.reader, &mut buf[buf_bytes..])?;
+            bytes_here += read_full(&mut self.reader, &mut self.buf[..])?;
         }
         self.bytes_read += bytes_here - buf_bytes;
 
@@ -151,6 +142,7 @@ where P: Padding,
     op: Op,
     buf: Vec<u8>,
     bytes_written: usize,
+    flushed: bool,
 }
 
 impl<P, W> PaddedWriter<P, W>
@@ -158,7 +150,7 @@ where P: Padding,
       W: Write,
 {
     pub fn new(block_size: usize, writer: W, op: Op) -> Self {
-        Self { _p: PhantomData, block_size, writer, op, buf: vec![0u8; block_size], bytes_written: 0 }
+        Self { _p: PhantomData, block_size, writer, op, buf: vec![0u8; block_size], bytes_written: 0, flushed: false }
     }
 }
 
@@ -197,6 +189,10 @@ where P: Padding,
     }
 
     fn flush(&mut self) -> Result<()> {
+        if self.flushed {
+            return Ok(());
+        }
+        self.flushed = true;
         let last_block_size = mod_positive(self.bytes_written, self.block_size);
         let mut last_block = vec![0u8; self.block_size * 2];
         last_block[..last_block_size].copy_from_slice(&self.buf[..last_block_size]);

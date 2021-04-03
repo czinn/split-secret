@@ -1,10 +1,11 @@
 mod poly;
+mod utils;
 mod partitioner;
 mod padding_streaming;
-//mod block_mode_streaming;
+mod block_mode_streaming;
 mod shamir;
 mod ida;
-//mod shamir_ida;
+mod shamir_ida;
 
 use std::io::{Read, Write};
 use std::fs::File;
@@ -73,7 +74,7 @@ fn main() {
         Subcommand::Split(opts) => {
             let n = opts.n;
             let k = opts.k.unwrap_or(opts.n);
-            let shamir = shamir::Shamir::new(k);
+            let shamir_ida = shamir_ida::ShamirIda::new(k);
 
             let mut input_file = File::open(opts.input).unwrap();
             let mut output_files = Vec::new();
@@ -84,7 +85,7 @@ fn main() {
             }
             let mut output_partitions = output_files.iter_mut().enumerate().map(|(i, output_file)| OutputPartition { x: (i + 1) as u8, writer: output_file }).collect();
 
-            shamir.split(&mut input_file, &mut output_partitions);
+            shamir_ida.split(&mut input_file, &mut output_partitions);
         },
         Subcommand::Join(opts) => {
             let mut input_files = Vec::new();
@@ -106,9 +107,9 @@ fn main() {
             let mut input_partitions = input_files.iter_mut().map(|(x, input_file)| InputPartition { x: *x, reader: input_file }).collect();
             let mut output_file = File::create(opts.output).unwrap();
 
-            let shamir = shamir::Shamir::new(k);
+            let shamir_ida = shamir_ida::ShamirIda::new(k);
 
-            shamir.join(&mut input_partitions, &mut output_file);
+            shamir_ida.join(&mut input_partitions, &mut output_file);
         }
     }
 }
