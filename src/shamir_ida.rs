@@ -1,9 +1,8 @@
 use std::io::{Cursor, Read, Take, Write};
 use std::marker::PhantomData;
 
-use crate::block_mode_streaming::{Direction, ReadStream, WriteStream};
+use crate::block_mode_streaming::{DecryptWriteStream, EncryptReadStream};
 use crate::ida::Ida;
-use crate::padding_streaming::{Op, PaddedReader, PaddedWriter};
 use crate::partitioner::{InputPartition, OutputPartition, Partitioner};
 use crate::shamir::Shamir;
 
@@ -45,7 +44,6 @@ where
         };
     }
 
-    const BLOCK_SIZE: usize = <<C as BlockCipher>::BlockSize as Unsigned>::USIZE;
     const KEY_SIZE: usize = <<C as NewBlockCipher>::KeySize as Unsigned>::USIZE;
     const IV_SIZE: usize = <<T as BlockMode<C, P>>::IvSize as Unsigned>::USIZE;
 }
@@ -56,13 +54,12 @@ where
     C: BlockCipher + NewBlockCipher,
     P: Padding,
 {
-    fn split<R: Read, W: Write>(&self, input: R, outputs: &mut [OutputPartition<W>]) {
+    fn split<R: Read, W: Write>(&self, mut input: R, outputs: &mut [OutputPartition<W>]) {
         let mut key = vec![0u8; Self::KEY_SIZE + Self::IV_SIZE];
         OsRng.fill_bytes(&mut key[..]);
         let cipher = C::new(&GenericArray::from_slice(&key[..Self::KEY_SIZE]));
         let block_mode: T = T::new(cipher, &GenericArray::from_slice(&key[Self::KEY_SIZE..]));
-        let mut input = PaddedReader::<P, _>::new(Self::BLOCK_SIZE, input, Op::Pad);
-        let mut input = ReadStream::new(block_mode, &mut input, Direction::Encrypt);
+        let mut input = EncryptReadStream::new(block_mode, &mut input);
 
         // Write the key using Shamir's secret sharing
         self.shamir.split(&mut Cursor::new(key), outputs);
@@ -71,7 +68,7 @@ where
         self.ida.split(&mut input, outputs);
     }
 
-    fn join<R: Read, W: Write>(&self, inputs: &mut [InputPartition<R>], output: W) {
+    fn join<R: Read, W: Write>(&self, inputs: &mut [InputPartition<R>], mut output: W) {
         let mut key = Vec::new();
         let mut limited_inputs: Vec<(u8, Take<_>)> = inputs
             .iter_mut()
@@ -93,8 +90,7 @@ where
 
         let cipher = C::new(&GenericArray::from_slice(&key[..Self::KEY_SIZE]));
         let block_mode: T = T::new(cipher, &GenericArray::from_slice(&key[Self::KEY_SIZE..]));
-        let mut output = PaddedWriter::<P, _>::new(Self::BLOCK_SIZE, output, Op::Unpad);
-        let mut output = WriteStream::new(block_mode, &mut output, Direction::Decrypt);
+        let mut output = DecryptWriteStream::new(block_mode, &mut output);
         self.ida.join(inputs, &mut output);
         output.flush().unwrap();
     }
