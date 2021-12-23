@@ -1,24 +1,25 @@
-use std::io::{Read, Write, Cursor, Take};
+use std::io::{Cursor, Read, Take, Write};
 use std::marker::PhantomData;
 
-use crate::partitioner::{Partitioner, InputPartition, OutputPartition};
-use crate::shamir::Shamir;
+use crate::block_mode_streaming::{Direction, ReadStream, WriteStream};
 use crate::ida::Ida;
-use crate::block_mode_streaming::{ReadStream, WriteStream, Direction};
-use crate::padding_streaming::{PaddedReader, PaddedWriter, Op};
+use crate::padding_streaming::{Op, PaddedReader, PaddedWriter};
+use crate::partitioner::{InputPartition, OutputPartition, Partitioner};
+use crate::shamir::Shamir;
 
+use block_modes::block_padding::Padding;
+use block_modes::BlockMode;
+use cipher::generic_array::GenericArray;
+use cipher::{BlockCipher, NewBlockCipher};
 use rand::rngs::OsRng;
 use rand::RngCore;
-use cipher::{BlockCipher, NewBlockCipher};
-use cipher::generic_array::GenericArray;
-use block_modes::BlockMode;
-use block_modes::block_padding::Padding;
 use typenum::Unsigned;
 
 pub struct ShamirIda<T, C, P>
-where T: BlockMode<C, P>,
-      C: BlockCipher + NewBlockCipher,
-      P: Padding,
+where
+    T: BlockMode<C, P>,
+    C: BlockCipher + NewBlockCipher,
+    P: Padding,
 {
     shamir: Shamir,
     ida: Ida<P>,
@@ -28,9 +29,10 @@ where T: BlockMode<C, P>,
 }
 
 impl<T, C, P> ShamirIda<T, C, P>
-where T: BlockMode<C, P>,
-      C: BlockCipher + NewBlockCipher,
-      P: Padding,
+where
+    T: BlockMode<C, P>,
+    C: BlockCipher + NewBlockCipher,
+    P: Padding,
 {
     pub fn new(k: u8) -> Self {
         assert!(k > 1);
@@ -49,16 +51,16 @@ where T: BlockMode<C, P>,
 }
 
 impl<T, C, P> Partitioner for ShamirIda<T, C, P>
-where T: BlockMode<C, P>,
-      C: BlockCipher + NewBlockCipher,
-      P: Padding,
+where
+    T: BlockMode<C, P>,
+    C: BlockCipher + NewBlockCipher,
+    P: Padding,
 {
     fn split<R: Read, W: Write>(&self, input: R, outputs: &mut [OutputPartition<W>]) {
         let mut key = vec![0u8; Self::KEY_SIZE + Self::IV_SIZE];
         OsRng.fill_bytes(&mut key[..]);
         let cipher = C::new(&GenericArray::from_slice(&key[..Self::KEY_SIZE]));
-        let block_mode: T =
-            T::new(cipher, &GenericArray::from_slice(&key[Self::KEY_SIZE..]));
+        let block_mode: T = T::new(cipher, &GenericArray::from_slice(&key[Self::KEY_SIZE..]));
         let mut input = PaddedReader::<P, _>::new(Self::BLOCK_SIZE, input, Op::Pad);
         let mut input = ReadStream::new(block_mode, &mut input, Direction::Encrypt);
 
@@ -71,14 +73,26 @@ where T: BlockMode<C, P>,
 
     fn join<R: Read, W: Write>(&self, inputs: &mut [InputPartition<R>], output: W) {
         let mut key = Vec::new();
-        let mut limited_inputs: Vec<(u8, Take<_>)> =
-            inputs.iter_mut().map(|input| (input.x, (&mut input.reader).take((Self::KEY_SIZE + Self::IV_SIZE) as u64))).collect();
-        self.shamir.join(&mut limited_inputs.iter_mut().map(|(x, reader)| InputPartition { x: *x, reader }).collect::<Vec<_>>(), &mut key);
+        let mut limited_inputs: Vec<(u8, Take<_>)> = inputs
+            .iter_mut()
+            .map(|input| {
+                (
+                    input.x,
+                    (&mut input.reader).take((Self::KEY_SIZE + Self::IV_SIZE) as u64),
+                )
+            })
+            .collect();
+        self.shamir.join(
+            &mut limited_inputs
+                .iter_mut()
+                .map(|(x, reader)| InputPartition { x: *x, reader })
+                .collect::<Vec<_>>(),
+            &mut key,
+        );
         debug_assert!(key.len() == Self::KEY_SIZE + Self::IV_SIZE);
 
         let cipher = C::new(&GenericArray::from_slice(&key[..Self::KEY_SIZE]));
-        let block_mode: T =
-            T::new(cipher, &GenericArray::from_slice(&key[Self::KEY_SIZE..]));
+        let block_mode: T = T::new(cipher, &GenericArray::from_slice(&key[Self::KEY_SIZE..]));
         let mut output = PaddedWriter::<P, _>::new(Self::BLOCK_SIZE, output, Op::Unpad);
         let mut output = WriteStream::new(block_mode, &mut output, Direction::Decrypt);
         self.ida.join(inputs, &mut output);
@@ -91,14 +105,15 @@ mod tests {
     use super::*;
     use crate::partitioner::test_join;
 
-    use aes::{Aes256, Aes128};
-    use block_padding::{Iso7816, Pkcs7};
+    use aes::{Aes128, Aes256};
     use block_modes::{Cbc, Cfb};
+    use block_padding::{Iso7816, Pkcs7};
 
     fn base_two_of_three<T, C, P>()
-    where T: BlockMode<C, P>,
-          C: BlockCipher + NewBlockCipher,
-          P: Padding,
+    where
+        T: BlockMode<C, P>,
+        C: BlockCipher + NewBlockCipher,
+        P: Padding,
     {
         let plaintext: Vec<u8> = "hello world".as_bytes().into();
         let shamir = ShamirIda::<T, C, P>::new(2);

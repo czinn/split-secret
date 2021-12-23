@@ -1,9 +1,9 @@
-use std::io::{Read, Write};
 use std::cmp;
+use std::io::{Read, Write};
 
-use crate::partitioner::{Partitioner, InputPartition, OutputPartition};
+use crate::partitioner::{InputPartition, OutputPartition, Partitioner};
 
-use galois_2p8::{PrimitivePolynomialField, IrreducablePolynomial, Field};
+use galois_2p8::{Field, IrreducablePolynomial, PrimitivePolynomialField};
 use rand::rngs::OsRng;
 use rand::RngCore;
 
@@ -15,7 +15,10 @@ pub struct Shamir {
 impl Shamir {
     pub fn new(k: u8) -> Self {
         assert!(k > 1);
-        return Shamir { k: k, base: IrreducablePolynomial::Poly84320 };
+        return Shamir {
+            k: k,
+            base: IrreducablePolynomial::Poly84320,
+        };
     }
 }
 
@@ -36,8 +39,7 @@ impl Partitioner for Shamir {
         loop {
             match input.read(&mut read_buf) {
                 Err(_) | Ok(0) => break,
-                Ok(read_size) =>
-                {
+                Ok(read_size) => {
                     let slice = &read_buf[0..read_size];
                     for write_buf in write_bufs.iter_mut() {
                         write_buf[0..read_size].copy_from_slice(slice);
@@ -49,13 +51,20 @@ impl Partitioner for Shamir {
                         }
                         OsRng.fill_bytes(&mut coefficients_buf[0..read_size]);
                         for (write_buf, scale) in write_bufs.iter_mut().zip(xs.iter()) {
-                            field.add_scaled_multiword(&mut write_buf[0..read_size], &coefficients_buf[0..read_size], *scale);
+                            field.add_scaled_multiword(
+                                &mut write_buf[0..read_size],
+                                &coefficients_buf[0..read_size],
+                                *scale,
+                            );
                         }
                     }
                     for (write_buf, output) in write_bufs.iter().zip(outputs.iter_mut()) {
-                        output.writer.write(&write_buf[0..read_size]).expect("write failed");
+                        output
+                            .writer
+                            .write(&write_buf[0..read_size])
+                            .expect("write failed");
                     }
-                },
+                }
             }
         }
     }
@@ -75,7 +84,10 @@ impl Partitioner for Shamir {
                 if other_input.x == input.x {
                     continue;
                 }
-                coefficient = field.mult(coefficient, field.div(other_input.x, field.sub(input.x, other_input.x)));
+                coefficient = field.mult(
+                    coefficient,
+                    field.div(other_input.x, field.sub(input.x, other_input.x)),
+                );
             }
             combine_coefficients.push(coefficient);
         }
@@ -87,7 +99,7 @@ impl Partitioner for Shamir {
                     Err(_) => {
                         read_size = 0;
                         break;
-                    },
+                    }
                     Ok(n) => read_size = cmp::min(read_size, n),
                 }
             }
@@ -97,7 +109,11 @@ impl Partitioner for Shamir {
 
             write_buf.fill(0u8);
             for (read_buf, scale) in read_bufs.iter().zip(combine_coefficients.iter()) {
-                field.add_scaled_multiword(&mut write_buf[0..read_size], &read_buf[0..read_size], *scale);
+                field.add_scaled_multiword(
+                    &mut write_buf[0..read_size],
+                    &read_buf[0..read_size],
+                    *scale,
+                );
             }
             output.write(&write_buf[0..read_size]).unwrap();
         }
