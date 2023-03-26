@@ -105,7 +105,7 @@ fn main() {
                 .iter_mut()
                 .enumerate()
                 .for_each(|(x, output_file)| {
-                    write_share_header(output_file, &ShareHeader { k: k, x: x as u8 })
+                    write_share_header(output_file, &ShareHeader { k: k, x: (x + 1) as u8 })
                 });
             let mut output_partitions: Vec<_> = output_files
                 .iter_mut()
@@ -138,7 +138,7 @@ fn main() {
             let mut input_partitions: Vec<_> = input_files
                 .iter_mut()
                 .map(|(x, input_file)| InputPartition {
-                    x: *x + 1,
+                    x: *x,
                     reader: input_file,
                 })
                 .collect();
