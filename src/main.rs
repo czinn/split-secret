@@ -13,54 +13,53 @@ use std::io::{Read, Write};
 use crate::partitioner::{InputPartition, OutputPartition, Partitioner};
 
 use aes::Aes256;
-use block_modes::Cbc;
 use block_padding::Iso7816;
 
-use clap::Clap;
+use clap::{Parser, Subcommand, Args};
 
-#[derive(Clap)]
-#[clap(
+#[derive(Parser)]
+#[command(
     version = "0.1.0",
     author = "Charles Zinn",
     about = "An implementation of Shamir's Secret Sharing"
 )]
 struct Opts {
-    #[clap(subcommand)]
-    subcommand: Subcommand,
+    #[command(subcommand)]
+    subcommand: Commands,
 }
 
-#[derive(Clap)]
-enum Subcommand {
-    #[clap(about = "Split a file into multiple shares")]
+#[derive(Subcommand)]
+enum Commands {
+    #[command(about = "Split a file into multiple shares")]
     Split(SplitOpts),
-    #[clap(about = "Combine shares into the original file")]
+    #[command(about = "Combine shares into the original file")]
     Join(JoinOpts),
 }
 
-#[derive(Clap)]
+#[derive(Args)]
 struct SplitOpts {
-    #[clap(short, about = "number of shares to generate")]
+    #[arg(short, help = "number of shares to generate")]
     n: u8,
-    #[clap(
+    #[arg(
         short,
-        about = "number of shares required to reconstruct original (default: n)"
+        help = "number of shares required to reconstruct original (default: n)"
     )]
     k: Option<u8>,
-    #[clap(about = "input file")]
+    #[arg(help = "input file")]
     input: String,
-    #[clap(
+    #[arg(
         short,
         long,
-        about = "prefix for output files; output will be in [output].1, [output].2, etc."
+        help = "prefix for output files; output will be in [output].1, [output].2, etc."
     )]
     output: String,
 }
 
-#[derive(Clap)]
+#[derive(Args)]
 struct JoinOpts {
-    #[clap(required = true, about = "input share files")]
+    #[arg(required = true, help = "input share files")]
     inputs: Vec<String>,
-    #[clap(short, long, about = "output file for original")]
+    #[arg(short, long, help = "output file for original")]
     output: String,
 }
 
@@ -86,10 +85,10 @@ fn main() {
     let opts: Opts = Opts::parse();
 
     match opts.subcommand {
-        Subcommand::Split(opts) => {
+        Commands::Split(opts) => {
             let n = opts.n;
             let k = opts.k.unwrap_or(opts.n);
-            let shamir_ida = shamir_ida::ShamirIda::<Cbc<_, _>, Aes256, Iso7816>::new(k);
+            let shamir_ida = shamir_ida::ShamirIda::<cbc::Encryptor<Aes256>, cbc::Decryptor<Aes256>, Iso7816>::new(k);
 
             let mut input_file = File::open(&opts.input).unwrap();
             let mut output_files: Vec<_> = (1u8..=n)
@@ -115,7 +114,7 @@ fn main() {
 
             shamir_ida.split(&mut input_file, &mut output_partitions);
         }
-        Subcommand::Join(opts) => {
+        Commands::Join(opts) => {
             let mut input_files = Vec::new();
             let mut k = None;
             for input in opts.inputs {
@@ -135,13 +134,13 @@ fn main() {
             let mut input_partitions: Vec<_> = input_files
                 .iter_mut()
                 .map(|(x, input_file)| InputPartition {
-                    x: *x,
+                    x: *x + 1,
                     reader: input_file,
                 })
                 .collect();
             let mut output_file = File::create(opts.output).unwrap();
 
-            let shamir_ida = shamir_ida::ShamirIda::<Cbc<_, _>, Aes256, Iso7816>::new(k);
+            let shamir_ida = shamir_ida::ShamirIda::<cbc::Encryptor<Aes256>, cbc::Decryptor<Aes256>, Iso7816>::new(k);
 
             shamir_ida.join(&mut input_partitions, &mut output_file);
         }

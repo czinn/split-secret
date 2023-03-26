@@ -6,12 +6,12 @@ use crate::padding_streaming::{Op, PaddedReader, PaddedWriter};
 use crate::partitioner::{InputPartition, OutputPartition, Partitioner};
 use crate::poly::lagrange_eval;
 
-use block_padding::Padding;
+use block_padding::RawPadding;
 use galois_2p8::{Field, IrreducablePolynomial, PrimitivePolynomialField};
 
 pub struct Ida<P>
 where
-    P: Padding,
+    P: RawPadding,
 {
     k: u8,
     base: IrreducablePolynomial,
@@ -20,7 +20,7 @@ where
 
 impl<P> Ida<P>
 where
-    P: Padding,
+    P: RawPadding,
 {
     pub fn new(k: u8) -> Self {
         assert!(k > 1);
@@ -36,7 +36,7 @@ const BUF_SIZE: usize = 1024;
 
 impl<P> Partitioner for Ida<P>
 where
-    P: Padding,
+    P: RawPadding,
 {
     fn split<R: Read, W: Write>(&self, input: R, outputs: &mut [OutputPartition<W>]) {
         let n = outputs.len() as u8;
@@ -145,7 +145,7 @@ mod tests {
 
     use block_padding::{Iso7816, Pkcs7};
 
-    fn base_two_of_three<P: Padding>() {
+    fn base_two_of_three<P: RawPadding>() {
         let plaintext: Vec<u8> = "hello worlds".as_bytes().into();
         let ida = Ida::<P>::new(2);
         let mut partitions = ida.split_in_memory(&plaintext, 3);

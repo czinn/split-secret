@@ -6,32 +6,23 @@ use std::ops::Range;
 use crate::padding_streaming::{Op, PaddedReader, PaddedWriter};
 use crate::utils::read_full;
 
-use block_modes::cipher::block::{BlockCipher, NewBlockCipher};
-use block_modes::cipher::generic_array::{ArrayLength, GenericArray};
-use block_modes::{block_padding::Padding, BlockMode};
+use cipher::{BlockSizeUser, BlockEncryptMut, BlockDecryptMut, Unsigned};
+use block_padding::RawPadding;
+use cipher::generic_array::{ArrayLength, GenericArray};
 use core::slice;
-use typenum::Unsigned;
-
-enum Direction {
-    Encrypt,
-    Decrypt,
-}
 
 const BUF_SIZE: usize = 1024;
 
-struct ReadStream<T, C, P, R>
+pub struct EncryptReadStream<C, P, R>
 where
-    T: BlockMode<C, P>,
-    C: BlockCipher + NewBlockCipher,
-    P: Padding,
+    C: BlockEncryptMut,
+    P: RawPadding,
     R: Read,
 {
-    block_mode: T,
-    reader: R,
-    direction: Direction,
+    cipher: C,
+    reader: PaddedReader<P, R>,
     buf: [u8; BUF_SIZE],
     filled_buf: Range<usize>,
-    _c: PhantomData<C>,
     _p: PhantomData<P>,
 }
 
@@ -48,24 +39,22 @@ where
     }
 }
 
-impl<T, C, P, R> ReadStream<T, C, P, R>
+impl<C, P, R> EncryptReadStream<C, P, R>
 where
-    T: BlockMode<C, P>,
-    C: BlockCipher + NewBlockCipher,
-    P: Padding,
+    C: BlockEncryptMut,
+    P: RawPadding,
     R: Read,
 {
-    const BLOCK_SIZE: usize = <<C as BlockCipher>::BlockSize as Unsigned>::USIZE;
+    const BLOCK_SIZE: usize = <C as BlockSizeUser>::BlockSize::USIZE;
 
-    pub fn new(block_mode: T, reader: R, direction: Direction) -> Self {
+    pub fn new(cipher: C, reader: R) -> Self {
         let buf = [0u8; BUF_SIZE];
+        let reader = PaddedReader::<P, _>::new(Self::BLOCK_SIZE, reader, Op::Pad);
         Self {
-            block_mode,
+            cipher,
             reader,
-            direction,
             buf,
             filled_buf: 0..0,
-            _c: PhantomData,
             _p: PhantomData,
         }
     }
@@ -86,23 +75,15 @@ where
 
         // Encrypt or decrypt the bytes in the buffer
         let mut blocks = to_blocks(&mut self.buf[self.filled_buf.clone()]);
-        match &self.direction {
-            Direction::Encrypt => {
-                T::encrypt_blocks(&mut self.block_mode, &mut blocks);
-            }
-            Direction::Decrypt => {
-                T::decrypt_blocks(&mut self.block_mode, &mut blocks);
-            }
-        }
+        self.cipher.encrypt_blocks_mut(&mut blocks);
         Ok(self.filled_buf.len())
     }
 }
 
-impl<T, C, P, R> Read for ReadStream<T, C, P, R>
+impl<C, P, R> Read for EncryptReadStream<C, P, R>
 where
-    T: BlockMode<C, P>,
-    C: BlockCipher + NewBlockCipher,
-    P: Padding,
+    C: BlockEncryptMut,
+    P: RawPadding,
     R: Read,
 {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
@@ -127,49 +108,43 @@ where
     }
 }
 
-struct WriteStream<T, C, P, W>
+pub struct DecryptWriteStream<C, P, W>
 where
-    T: BlockMode<C, P>,
-    C: BlockCipher + NewBlockCipher,
-    P: Padding,
+    C: BlockDecryptMut,
+    P: RawPadding,
     W: Write,
 {
-    block_mode: T,
-    writer: W,
-    direction: Direction,
+    cipher: C,
+    writer: PaddedWriter<P, W>,
     buf: Vec<u8>,
     buf_bytes: usize,
-    _c: PhantomData<C>,
     _p: PhantomData<P>,
 }
 
-impl<T, C, P, W> WriteStream<T, C, P, W>
+impl<C, P, W> DecryptWriteStream<C, P, W>
 where
-    T: BlockMode<C, P>,
-    C: BlockCipher + NewBlockCipher,
-    P: Padding,
+    C: BlockDecryptMut,
+    P: RawPadding,
     W: Write,
 {
-    const BLOCK_SIZE: usize = <<C as BlockCipher>::BlockSize as Unsigned>::USIZE;
+    const BLOCK_SIZE: usize = <C as BlockSizeUser>::BlockSize::USIZE;
 
-    pub fn new(block_mode: T, writer: W, direction: Direction) -> Self {
+    pub fn new(cipher: C, writer: W) -> Self {
+        let writer = PaddedWriter::<P, _>::new(Self::BLOCK_SIZE, writer, Op::Unpad);
         Self {
-            block_mode,
+            cipher,
             writer,
-            direction,
             buf: vec![0u8; Self::BLOCK_SIZE * 8],
             buf_bytes: 0,
-            _c: PhantomData,
             _p: PhantomData,
         }
     }
 }
 
-impl<T, C, P, W> Write for WriteStream<T, C, P, W>
+impl<C, P, W> Write for DecryptWriteStream<C, P, W>
 where
-    T: BlockMode<C, P>,
-    C: BlockCipher + NewBlockCipher,
-    P: Padding,
+    C: BlockDecryptMut,
+    P: RawPadding,
     W: Write,
 {
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
@@ -186,10 +161,7 @@ where
             // Process and write as many blocks from the write buffer as possible
             let bytes_to_write_immediately = self.buf_bytes - self.buf_bytes % Self::BLOCK_SIZE;
             let mut blocks = to_blocks(&mut self.buf[..bytes_to_write_immediately]);
-            match &self.direction {
-                Direction::Encrypt => T::encrypt_blocks(&mut self.block_mode, &mut blocks),
-                Direction::Decrypt => T::decrypt_blocks(&mut self.block_mode, &mut blocks),
-            };
+            self.cipher.decrypt_blocks_mut(&mut blocks);
             self.writer
                 .write_all(&self.buf[..bytes_to_write_immediately])?;
             // Move any remaining bytes to the beginning of the buffer
@@ -209,77 +181,5 @@ where
         } else {
             self.writer.flush()
         }
-    }
-}
-
-pub struct EncryptReadStream<T, C, P, R>(ReadStream<T, C, P, PaddedReader<P, R>>)
-where
-    T: BlockMode<C, P>,
-    C: BlockCipher + NewBlockCipher,
-    P: Padding,
-    R: Read;
-
-impl<T, C, P, R> EncryptReadStream<T, C, P, R>
-where
-    T: BlockMode<C, P>,
-    C: BlockCipher + NewBlockCipher,
-    P: Padding,
-    R: Read,
-{
-    const BLOCK_SIZE: usize = <<C as BlockCipher>::BlockSize as Unsigned>::USIZE;
-
-    pub fn new(block_mode: T, reader: R) -> Self {
-        let reader = PaddedReader::<P, _>::new(Self::BLOCK_SIZE, reader, Op::Pad);
-        Self(ReadStream::new(block_mode, reader, Direction::Encrypt))
-    }
-}
-
-impl<T, C, P, R> Read for EncryptReadStream<T, C, P, R>
-where
-    T: BlockMode<C, P>,
-    C: BlockCipher + NewBlockCipher,
-    P: Padding,
-    R: Read,
-{
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
-        self.0.read(buf)
-    }
-}
-
-pub struct DecryptWriteStream<T, C, P, W>(WriteStream<T, C, P, PaddedWriter<P, W>>)
-where
-    T: BlockMode<C, P>,
-    C: BlockCipher + NewBlockCipher,
-    P: Padding,
-    W: Write;
-
-impl<T, C, P, W> DecryptWriteStream<T, C, P, W>
-where
-    T: BlockMode<C, P>,
-    C: BlockCipher + NewBlockCipher,
-    P: Padding,
-    W: Write,
-{
-    const BLOCK_SIZE: usize = <<C as BlockCipher>::BlockSize as Unsigned>::USIZE;
-
-    pub fn new(block_mode: T, writer: W) -> Self {
-        let writer = PaddedWriter::<P, _>::new(Self::BLOCK_SIZE, writer, Op::Unpad);
-        Self(WriteStream::new(block_mode, writer, Direction::Decrypt))
-    }
-}
-
-impl<T, C, P, W> Write for DecryptWriteStream<T, C, P, W>
-where
-    T: BlockMode<C, P>,
-    C: BlockCipher + NewBlockCipher,
-    P: Padding,
-    W: Write,
-{
-    fn write(&mut self, buf: &[u8]) -> Result<usize> {
-        self.0.write(buf)
-    }
-
-    fn flush(&mut self) -> Result<()> {
-        self.0.flush()
     }
 }

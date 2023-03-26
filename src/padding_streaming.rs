@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 
 use crate::utils::read_full;
 
-use block_padding::Padding;
+use block_padding::RawPadding;
 
 // mod_positive(n, k) == n (mod k); 1 <= mod_positive(n, k) <= k
 fn mod_positive(n: usize, k: usize) -> usize {
@@ -22,7 +22,7 @@ pub enum Op {
 
 pub struct PaddedReader<P, R>
 where
-    P: Padding,
+    P: RawPadding,
     R: Read,
 {
     _p: PhantomData<P>,
@@ -38,7 +38,7 @@ where
 
 impl<P, R> PaddedReader<P, R>
 where
-    P: Padding,
+    P: RawPadding,
     R: Read,
 {
     pub fn new(block_size: usize, reader: R, op: Op) -> Self {
@@ -56,7 +56,7 @@ where
 
 impl<P, R> Read for PaddedReader<P, R>
 where
-    P: Padding,
+    P: RawPadding,
     R: Read,
 {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
@@ -108,8 +108,8 @@ where
 
             // Figure out where the penultimate block ends, and copy everything after that into
             // last_block.
-            let mut last_block = vec![0u8; self.block_size * 2];
-            let last_block_size = mod_positive(self.bytes_read, self.block_size);
+            let mut last_block = vec![0u8; self.block_size];
+            let last_block_size = self.bytes_read % self.block_size;
             let mut read_size = bytes_here - last_block_size;
             let last_block_bytes_in_buf = min(buf_len, bytes_here) - read_size;
             last_block[..last_block_bytes_in_buf]
@@ -121,8 +121,10 @@ where
 
             // Apply the padding or unpadding to last block
             let output = match &self.op {
-                Op::Pad => P::pad(&mut last_block[..], last_block_size, self.block_size)
-                    .map_err(|_| Error::new(ErrorKind::InvalidData, "error padding data"))?,
+                Op::Pad => {
+                    P::raw_pad(&mut last_block[..], last_block_size);
+                    &last_block[..]
+                },
                 Op::Unpad => {
                     if last_block_size != self.block_size {
                         return Err(Error::new(
@@ -130,7 +132,7 @@ where
                             "input reader did not contain a multiple of block_size bytes",
                         ));
                     }
-                    P::unpad(&last_block[..last_block_size])
+                    P::raw_unpad(&last_block[..last_block_size])
                         .map_err(|_| Error::new(ErrorKind::InvalidData, "error unpadding data"))?
                 }
             };
@@ -149,7 +151,7 @@ where
 
 pub struct PaddedWriter<P, W>
 where
-    P: Padding,
+    P: RawPadding,
     W: Write,
 {
     _p: PhantomData<P>,
@@ -163,7 +165,7 @@ where
 
 impl<P, W> PaddedWriter<P, W>
 where
-    P: Padding,
+    P: RawPadding,
     W: Write,
 {
     pub fn new(block_size: usize, writer: W, op: Op) -> Self {
@@ -181,16 +183,16 @@ where
 
 impl<P, W> Write for PaddedWriter<P, W>
 where
-    P: Padding,
+    P: RawPadding,
     W: Write,
 {
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
         let bytes_buffered = min(self.block_size, self.bytes_written);
+        self.bytes_written += buf.len();
         let writeable_bytes = bytes_buffered + buf.len();
         if writeable_bytes < self.block_size {
             // Copy bytes into the local buffer
             self.buf[bytes_buffered..bytes_buffered + buf.len()].copy_from_slice(buf);
-            self.bytes_written += buf.len();
             return Ok(buf.len());
         }
         let bytes_to_write = writeable_bytes - self.block_size;
@@ -201,7 +203,6 @@ where
             self.buf.copy_within(bytes_to_write..bytes_buffered, 0);
             let bytes_remaining = bytes_buffered - bytes_to_write;
             self.buf[bytes_remaining..bytes_remaining + buf.len()].copy_from_slice(buf);
-            self.bytes_written += buf.len();
             Ok(buf.len())
         } else {
             // Write out everything from the internal buffer, and all but the last block_size
@@ -210,7 +211,6 @@ where
             self.writer
                 .write_all(&buf[0..buf.len() - self.block_size])?;
             self.buf[..].copy_from_slice(&buf[buf.len() - self.block_size..]);
-            self.bytes_written += buf.len();
             Ok(buf.len())
         }
     }
@@ -221,19 +221,27 @@ where
         }
         self.flushed = true;
         let last_block_size = mod_positive(self.bytes_written, self.block_size);
-        let mut last_block = vec![0u8; self.block_size * 2];
+        let mut last_block = vec![0u8; self.block_size];
         last_block[..last_block_size].copy_from_slice(&self.buf[..last_block_size]);
         let to_write = match &self.op {
-            Op::Pad => P::pad(&mut last_block[..], last_block_size, self.block_size)
-                .map_err(|_| Error::new(ErrorKind::InvalidData, "error padding data"))?,
+            Op::Pad => {
+                if last_block_size == self.block_size {
+                    self.writer.write_all(&last_block[..last_block_size])?;
+                    P::raw_pad(&mut last_block[..], 0);
+                    &last_block[..]
+                } else {
+                    P::raw_pad(&mut last_block[..], last_block_size);
+                    &last_block[..]
+                }
+            },
             Op::Unpad => {
-                if last_block_size % self.block_size != 0 {
+                if last_block_size != self.block_size {
                     return Err(Error::new(
                         ErrorKind::InvalidData,
                         "number of bytes written was not a multiple of block_size",
                     ));
                 }
-                P::unpad(&last_block[..last_block_size])
+                P::raw_unpad(&last_block[..])
                     .map_err(|_| Error::new(ErrorKind::InvalidData, "error unpadding data"))?
             }
         };
