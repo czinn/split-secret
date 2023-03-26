@@ -6,9 +6,9 @@ use std::ops::Range;
 use crate::padding_streaming::{Op, PaddedReader, PaddedWriter};
 use crate::utils::read_full;
 
-use cipher::{BlockSizeUser, BlockEncryptMut, BlockDecryptMut, Unsigned};
 use block_padding::RawPadding;
 use cipher::generic_array::{ArrayLength, GenericArray};
+use cipher::{BlockDecryptMut, BlockEncryptMut, BlockSizeUser, Unsigned};
 use core::slice;
 
 const BUF_SIZE: usize = 1024;

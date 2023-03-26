@@ -7,7 +7,7 @@ use crate::partitioner::{InputPartition, OutputPartition, Partitioner};
 use crate::shamir::Shamir;
 
 use block_padding::RawPadding;
-use cipher::{KeyIvInit, BlockEncryptMut, BlockDecryptMut};
+use cipher::{BlockDecryptMut, BlockEncryptMut, KeyIvInit};
 use rand::rngs::OsRng;
 
 pub struct ShamirIda<E, D, P>
@@ -81,7 +81,8 @@ where
         debug_assert!(key.len() == D::key_size() + D::iv_size());
 
         let cipher = D::new_from_slices(&key[..D::key_size()], &key[D::key_size()..]).unwrap();
-        let mut output: DecryptWriteStream<D, P, &mut W> = DecryptWriteStream::new(cipher, &mut output);
+        let mut output: DecryptWriteStream<D, P, &mut W> =
+            DecryptWriteStream::new(cipher, &mut output);
         self.ida.join(inputs, &mut output);
         output.flush().unwrap();
     }

@@ -124,7 +124,7 @@ where
                 Op::Pad => {
                     P::raw_pad(&mut last_block[..], last_block_size);
                     &last_block[..]
-                },
+                }
                 Op::Unpad => {
                     if last_block_size != self.block_size {
                         return Err(Error::new(
@@ -233,7 +233,7 @@ where
                     P::raw_pad(&mut last_block[..], last_block_size);
                     &last_block[..]
                 }
-            },
+            }
             Op::Unpad => {
                 if last_block_size != self.block_size {
                     return Err(Error::new(

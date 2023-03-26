@@ -15,7 +15,7 @@ use crate::partitioner::{InputPartition, OutputPartition, Partitioner};
 use aes::Aes256;
 use block_padding::Iso7816;
 
-use clap::{Parser, Subcommand, Args};
+use clap::{Args, Parser, Subcommand};
 
 #[derive(Parser)]
 #[command(
@@ -88,7 +88,11 @@ fn main() {
         Commands::Split(opts) => {
             let n = opts.n;
             let k = opts.k.unwrap_or(opts.n);
-            let shamir_ida = shamir_ida::ShamirIda::<cbc::Encryptor<Aes256>, cbc::Decryptor<Aes256>, Iso7816>::new(k);
+            let shamir_ida = shamir_ida::ShamirIda::<
+                cbc::Encryptor<Aes256>,
+                cbc::Decryptor<Aes256>,
+                Iso7816,
+            >::new(k);
 
             let mut input_file = File::open(&opts.input).unwrap();
             let mut output_files: Vec<_> = (1u8..=n)
@@ -140,7 +144,11 @@ fn main() {
                 .collect();
             let mut output_file = File::create(opts.output).unwrap();
 
-            let shamir_ida = shamir_ida::ShamirIda::<cbc::Encryptor<Aes256>, cbc::Decryptor<Aes256>, Iso7816>::new(k);
+            let shamir_ida = shamir_ida::ShamirIda::<
+                cbc::Encryptor<Aes256>,
+                cbc::Decryptor<Aes256>,
+                Iso7816,
+            >::new(k);
 
             shamir_ida.join(&mut input_partitions, &mut output_file);
         }
